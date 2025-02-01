@@ -12,6 +12,16 @@ interface BookmarkButtonProps {
   placeId: number;
 }
 
+interface BookmarkResponse {
+  isSuccess: boolean;
+  code: string;
+  message: string;
+  result: {
+    placeId: number;
+    isSaved: boolean;
+  };
+}
+
 export const Bookmark = ({ placeId }: BookmarkButtonProps) => {
   const queryClient = useQueryClient();
 
@@ -27,12 +37,37 @@ export const Bookmark = ({ placeId }: BookmarkButtonProps) => {
       }
       return await postPlaceBookmark(placeId);
     },
-    onSuccess: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['bookmark', placeId] });
+
+      const previousBookmark = queryClient.getQueryData<BookmarkResponse>(['bookmark', placeId]);
+
+      queryClient.setQueryData<BookmarkResponse>(['bookmark', placeId], (old) => {
+        if (!old) return previousBookmark;
+
+        return {
+          ...old,
+          result: {
+            ...old.result,
+            isSaved: !old.result.isSaved,
+          },
+        };
+      });
+
+      return { previousBookmark };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousBookmark) {
+        queryClient.setQueryData<BookmarkResponse>(['bookmark', placeId], context.previousBookmark);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['bookmark', placeId] });
     },
   });
 
   const handleClick = () => {
+    if (!bookmarkStatus) return;
     toggleBookmark();
   };
 
